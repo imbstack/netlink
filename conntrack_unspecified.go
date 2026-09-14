@@ -29,7 +29,10 @@ func ConntrackTableList(table ConntrackTableType, family InetFamily) ([]*Conntra
 
 // ConntrackTableListIter calls the provided callback on all ConntrackFlows in the table of a specific family
 // conntrack -L [table] [options]          List conntrack or expectation table
-func ConntrackTableListIter(table ConntrackTableType, family InetFamily, f func(*ConntrackFlow)) error {
+//
+// If the returned error is [ErrDumpInterrupted], results may be inconsistent
+// or incomplete.
+func ConntrackTableListIter(table ConntrackTableType, family InetFamily, f func(*ConntrackFlow) bool) error {
 	return ErrNotImplemented
 }
 
@@ -37,6 +40,12 @@ func ConntrackTableListIter(table ConntrackTableType, family InetFamily, f func(
 // conntrack -L [table] [options]          List conntrack or expectation table
 func ConntrackTableListWithOptions(table ConntrackTableType, family InetFamily, options ConntrackTableListOptions) ([]*ConntrackFlow, error) {
 	return nil, ErrNotImplemented
+}
+
+// ConntrackTableListIterWithOptions calls the provided callback on all ConntrackFlows in the table of a specific family and options
+// conntrack -L [table] [options]          List conntrack or expectation table
+func ConntrackTableListIterWithOptions(table ConntrackTableType, family InetFamily, options ConntrackTableListOptions, f func(*ConntrackFlow) bool) error {
+	return ErrNotImplemented
 }
 
 // ConntrackTableFlush flushes all the flows of a specified table
@@ -79,6 +88,15 @@ func (h *Handle) ConntrackTableListIter(table ConntrackTableType, family InetFam
 // conntrack -L [table] [options]          List conntrack or expectation table
 func (h *Handle) ConntrackTableListWithOptions(table ConntrackTableType, family InetFamily, options ConntrackTableListOptions) ([]*ConntrackFlow, error) {
 	return nil, ErrNotImplemented
+}
+
+// ConntrackTableListIterWithOptions calls the provided callback on all ConntrackFlows in the table of a specific family using the netlink handle passed and options
+// conntrack -L [table] [options]          List conntrack or expectation table
+//
+// If the returned error is [ErrDumpInterrupted], results may be inconsistent
+// or incomplete.
+func (h *Handle) ConntrackTableListIterWithOptions(table ConntrackTableType, family InetFamily, options ConntrackTableListOptions, f func(*ConntrackFlow) bool) error {
+	return ErrNotImplemented
 }
 
 // ConntrackTableFlush flushes all the flows of a specified table using the netlink handle passed
