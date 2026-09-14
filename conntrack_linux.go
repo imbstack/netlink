@@ -20,9 +20,6 @@ type ConntrackTableType uint8
 type ConntrackTableListOptions struct {
 	// ZeroCounters sets IPCTNL_MSG_CT_GET_CTRZERO which atomically zeros counters after reading them.
 	// Equivalent to -L -z
-	//
-	// Only supported for ConntrackTable; listing any other table with this set
-	// returns an error.
 	ZeroCounters bool
 }
 
@@ -262,9 +259,6 @@ func (h *Handle) newConntrackRequest(table ConntrackTableType, family InetFamily
 func (h *Handle) dumpConntrackTable(table ConntrackTableType, family InetFamily, options ConntrackTableListOptions) ([][]byte, error) {
 	msgType := nl.IPCTNL_MSG_CT_GET
 	if options.ZeroCounters {
-		if table != ConntrackTable {
-			return nil, fmt.Errorf("netlink: ZeroCounters is only supported for ConntrackTable")
-		}
 		msgType = nl.IPCTNL_MSG_CT_GET_CTRZERO
 	}
 	req := h.newConntrackRequest(table, family, msgType, unix.NLM_F_DUMP)

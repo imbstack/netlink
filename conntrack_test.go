@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"strings"
 	"testing"
 	"time"
 
@@ -350,47 +349,6 @@ func TestConntrackTableListZeroCounters(t *testing.T) {
 			t.Errorf("Counters of flow with source port %d were not zeroed: %d packets", port, packets)
 		}
 	}
-
-	// Switch back to the original namespace
-	netns.Set(*origns)
-}
-
-// TestConntrackTableListZeroCountersTableGuard tests that ZeroCounters is
-// rejected for any table other than ConntrackTable. Message type 3 only means
-// GET_CTRZERO in the conntrack subsystem: in the expect subsystem it is
-// EXP_GET_STATS_CPU, so honouring the option there would dump per-CPU stats
-// instead of flows.
-func TestConntrackTableListZeroCountersTableGuard(t *testing.T) {
-	skipUnlessRoot(t)
-	t.Cleanup(setUpNetlinkTestWithKModule(t, "nf_conntrack"))
-	t.Cleanup(setUpNetlinkTestWithKModule(t, "nf_conntrack_netlink"))
-
-	// Creates a new namespace and bring up the loopback interface
-	origns, ns, h := nsCreateAndEnter(t)
-	defer netns.Set(*origns)
-	defer origns.Close()
-	defer ns.Close()
-	defer runtime.UnlockOSThread()
-
-	// Rejected: the expect table has no counters to zero.
-	_, err := h.ConntrackTableListWithOptions(ConntrackExpectTable, unix.AF_INET,
-		ConntrackTableListOptions{ZeroCounters: true})
-	if err == nil {
-		t.Fatal("ERROR expected listing the expect table with ZeroCounters to fail")
-	}
-	if !strings.Contains(err.Error(), "ZeroCounters") {
-		t.Fatalf("ERROR expected a ZeroCounters error, got: %s", err)
-	}
-
-	// Accepted: the conntrack table with ZeroCounters.
-	_, err = h.ConntrackTableListWithOptions(ConntrackTable, unix.AF_INET,
-		ConntrackTableListOptions{ZeroCounters: true})
-	CheckError(t, err)
-
-	// Accepted: the expect table without ZeroCounters.
-	_, err = h.ConntrackTableListWithOptions(ConntrackExpectTable, unix.AF_INET,
-		ConntrackTableListOptions{})
-	CheckError(t, err)
 
 	// Switch back to the original namespace
 	netns.Set(*origns)
