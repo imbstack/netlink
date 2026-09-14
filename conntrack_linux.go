@@ -16,6 +16,16 @@ import (
 // ConntrackTableType Conntrack table for the netlink operation
 type ConntrackTableType uint8
 
+// ConntrackTableListOptions contains options for different ways to list conntrack tables
+type ConntrackTableListOptions struct {
+	// ZeroCounters sets IPCTNL_MSG_CT_GET_CTRZERO which atomically zeros counters after reading them.
+	// Equivalent to -L -z
+	//
+	// Only supported for ConntrackTable; listing any other table with this set
+	// returns an error.
+	ZeroCounters bool
+}
+
 const (
 	// ConntrackTable Conntrack table
 	// https://github.com/torvalds/linux/blob/master/include/uapi/linux/netfilter/nfnetlink.h -> #define NFNL_SUBSYS_CTNETLINK		 1
@@ -56,6 +66,15 @@ func ConntrackTableList(table ConntrackTableType, family InetFamily) ([]*Conntra
 // conntrack -L [table] [options]          List conntrack or expectation table
 func ConntrackTableListIter(table ConntrackTableType, family InetFamily, f func(*ConntrackFlow) bool) error {
 	return pkgHandle().ConntrackTableListIter(table, family, f)
+}
+
+// ConntrackTableListWithOptions returns the flow list of a table of a specific family and options
+// conntrack -L [table] [options]          List conntrack or expectation table
+//
+// If the returned error is [ErrDumpInterrupted], results may be inconsistent
+// or incomplete.
+func ConntrackTableListWithOptions(table ConntrackTableType, family InetFamily, options ConntrackTableListOptions) ([]*ConntrackFlow, error) {
+	return pkgHandle().ConntrackTableListWithOptions(table, family, options)
 }
 
 // ConntrackTableFlush flushes all the flows of a specified table
@@ -103,6 +122,16 @@ func ConntrackDeleteFilters(table ConntrackTableType, family InetFamily, filters
 // If the returned error is [ErrDumpInterrupted], results may be inconsistent
 // or incomplete.
 func (h *Handle) ConntrackTableList(table ConntrackTableType, family InetFamily) ([]*ConntrackFlow, error) {
+	return h.ConntrackTableListWithOptions(table, family, ConntrackTableListOptions{})
+}
+
+// ConntrackTableListWithOptions returns the flow list of a table of a specific family using the netlink handle passed with options
+// conntrack -L [table] [options]          List conntrack or expectation table
+//
+// If the returned error is [ErrDumpInterrupted], results may be inconsistent
+// or incomplete.
+func (h *Handle) ConntrackTableListWithOptions(table ConntrackTableType, family InetFamily, options ConntrackTableListOptions) ([]*ConntrackFlow, error) {
+	// Deserialize all the flows
 	var result []*ConntrackFlow
 	executeErr := h.ConntrackTableListIter(table, family, func(flow *ConntrackFlow) bool {
 		result = append(result, flow)
@@ -204,7 +233,7 @@ func (h *Handle) ConntrackDeleteFilter(table ConntrackTableType, family InetFami
 // conntrack -D [table] parameters         Delete conntrack or expectation
 func (h *Handle) ConntrackDeleteFilters(table ConntrackTableType, family InetFamily, filters ...CustomConntrackFilter) (uint, error) {
 	var finalErr error
-	res, err := h.dumpConntrackTable(table, family)
+	res, err := h.dumpConntrackTable(table, family, ConntrackTableListOptions{})
 	if err != nil {
 		if !errors.Is(err, ErrDumpInterrupted) {
 			return 0, err
@@ -252,8 +281,15 @@ func (h *Handle) newConntrackRequest(table ConntrackTableType, family InetFamily
 	return req
 }
 
-func (h *Handle) dumpConntrackTable(table ConntrackTableType, family InetFamily) ([][]byte, error) {
-	req := h.newConntrackRequest(table, family, nl.IPCTNL_MSG_CT_GET, unix.NLM_F_DUMP)
+func (h *Handle) dumpConntrackTable(table ConntrackTableType, family InetFamily, options ConntrackTableListOptions) ([][]byte, error) {
+	msgType := nl.IPCTNL_MSG_CT_GET
+	if options.ZeroCounters {
+		if table != ConntrackTable {
+			return nil, fmt.Errorf("netlink: ZeroCounters is only supported for ConntrackTable")
+		}
+		msgType = nl.IPCTNL_MSG_CT_GET_CTRZERO
+	}
+	req := h.newConntrackRequest(table, family, msgType, unix.NLM_F_DUMP)
 	return req.Execute(unix.NETLINK_NETFILTER, 0)
 }
 

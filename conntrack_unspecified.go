@@ -6,6 +6,9 @@ package netlink
 // ConntrackTableType Conntrack table for the netlink operation
 type ConntrackTableType uint8
 
+// ConntrackTableListOptions placeholder
+type ConntrackTableListOptions struct{}
+
 // InetFamily Family type
 type InetFamily uint8
 
@@ -28,6 +31,12 @@ func ConntrackTableList(table ConntrackTableType, family InetFamily) ([]*Conntra
 // conntrack -L [table] [options]          List conntrack or expectation table
 func ConntrackTableListIter(table ConntrackTableType, family InetFamily, f func(*ConntrackFlow)) error {
 	return ErrNotImplemented
+}
+
+// ConntrackTableListWithOptions returns the flow list of a table of a specific family and options
+// conntrack -L [table] [options]          List conntrack or expectation table
+func ConntrackTableListWithOptions(table ConntrackTableType, family InetFamily, options ConntrackTableListOptions) ([]*ConntrackFlow, error) {
+	return nil, ErrNotImplemented
 }
 
 // ConntrackTableFlush flushes all the flows of a specified table
@@ -64,6 +73,12 @@ func (h *Handle) ConntrackTableList(table ConntrackTableType, family InetFamily)
 // or incomplete.
 func (h *Handle) ConntrackTableListIter(table ConntrackTableType, family InetFamily, f func(*ConntrackFlow) bool) error {
 	return ErrNotImplemented
+}
+
+// ConntrackTableListWithOptions returns the flow list of a table of a specific family using the netlink handle passed and options
+// conntrack -L [table] [options]          List conntrack or expectation table
+func (h *Handle) ConntrackTableListWithOptions(table ConntrackTableType, family InetFamily, options ConntrackTableListOptions) ([]*ConntrackFlow, error) {
+	return nil, ErrNotImplemented
 }
 
 // ConntrackTableFlush flushes all the flows of a specified table using the netlink handle passed
