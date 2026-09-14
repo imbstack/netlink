@@ -117,17 +117,19 @@ func (h *Handle) ConntrackTableList(table ConntrackTableType, family InetFamily)
 //
 // If the returned error is [ErrDumpInterrupted], results may be inconsistent
 // or incomplete.
+//
+// Flows are parsed and passed to the callback as they are received, so the
+// whole table is never held in memory. Returning false from the callback stops
+// the iteration; the remaining messages are drained and discarded.
+//
+// If the handle was created with a shared NETLINK_NETFILTER
+// socket, that socket stays locked for the duration of
+// the dump, so the callback must not call back into the netlink API on the same
+// handle. Collect the flows of interest and act on them after this returns.
 func (h *Handle) ConntrackTableListIter(table ConntrackTableType, family InetFamily, f func(*ConntrackFlow) bool) error {
-	res, executeErr := h.dumpConntrackTable(table, family)
-	if executeErr != nil && !errors.Is(executeErr, ErrDumpInterrupted) {
-		return executeErr
-	}
-
-	for _, dataRaw := range res {
-		if !f(parseRawData(dataRaw)) {
-			break
-		}
-	}
+	executeErr := h.iterConntrackTable(table, family, func(msg []byte) bool {
+		return f(parseRawData(msg))
+	})
 
 	return executeErr
 }
@@ -255,6 +257,11 @@ func (h *Handle) newConntrackRequest(table ConntrackTableType, family InetFamily
 func (h *Handle) dumpConntrackTable(table ConntrackTableType, family InetFamily) ([][]byte, error) {
 	req := h.newConntrackRequest(table, family, nl.IPCTNL_MSG_CT_GET, unix.NLM_F_DUMP)
 	return req.Execute(unix.NETLINK_NETFILTER, 0)
+}
+
+func (h *Handle) iterConntrackTable(table ConntrackTableType, family InetFamily, f func([]byte) bool) error {
+	req := h.newConntrackRequest(table, family, nl.IPCTNL_MSG_CT_GET, unix.NLM_F_DUMP)
+	return req.ExecuteIter(unix.NETLINK_NETFILTER, 0, f)
 }
 
 // ProtoInfo wraps an L4-protocol structure - roughly corresponds to the
