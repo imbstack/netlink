@@ -52,6 +52,12 @@ func ConntrackTableList(table ConntrackTableType, family InetFamily) ([]*Conntra
 	return pkgHandle().ConntrackTableList(table, family)
 }
 
+// ConntrackTableListIter calls the provided callback on all ConntrackFlows in the table of a specific family
+// conntrack -L [table] [options]          List conntrack or expectation table
+func ConntrackTableListIter(table ConntrackTableType, family InetFamily, f func(*ConntrackFlow) bool) error {
+	return pkgHandle().ConntrackTableListIter(table, family, f)
+}
+
 // ConntrackTableFlush flushes all the flows of a specified table
 // conntrack -F [table]            Flush table
 // The flush operation applies to all the family types
@@ -97,18 +103,33 @@ func ConntrackDeleteFilters(table ConntrackTableType, family InetFamily, filters
 // If the returned error is [ErrDumpInterrupted], results may be inconsistent
 // or incomplete.
 func (h *Handle) ConntrackTableList(table ConntrackTableType, family InetFamily) ([]*ConntrackFlow, error) {
-	res, executeErr := h.dumpConntrackTable(table, family)
-	if executeErr != nil && !errors.Is(executeErr, ErrDumpInterrupted) {
-		return nil, executeErr
-	}
-
-	// Deserialize all the flows
 	var result []*ConntrackFlow
-	for _, dataRaw := range res {
-		result = append(result, parseRawData(dataRaw))
-	}
+	executeErr := h.ConntrackTableListIter(table, family, func(flow *ConntrackFlow) bool {
+		result = append(result, flow)
+		return true
+	})
 
 	return result, executeErr
+}
+
+// ConntrackTableListIter calls the provided callback on all ConntrackFlows in the table of a specific family
+// conntrack -L [table] [options]          List conntrack or expectation table
+//
+// If the returned error is [ErrDumpInterrupted], results may be inconsistent
+// or incomplete.
+func (h *Handle) ConntrackTableListIter(table ConntrackTableType, family InetFamily, f func(*ConntrackFlow) bool) error {
+	res, executeErr := h.dumpConntrackTable(table, family)
+	if executeErr != nil && !errors.Is(executeErr, ErrDumpInterrupted) {
+		return executeErr
+	}
+
+	for _, dataRaw := range res {
+		if !f(parseRawData(dataRaw)) {
+			break
+		}
+	}
+
+	return executeErr
 }
 
 // ConntrackTableFlush flushes all the flows of a specified table using the netlink handle passed
