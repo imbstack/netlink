@@ -118,9 +118,12 @@ func (h *Handle) ConntrackTableList(table ConntrackTableType, family InetFamily)
 // If the returned error is [ErrDumpInterrupted], results may be inconsistent
 // or incomplete.
 //
-// Flows are parsed and passed to the callback as they are received, so the
-// whole table is never held in memory. Returning false from the callback stops
-// the iteration; the remaining messages are drained and discarded.
+// Flows are normally parsed and passed to the callback as they are received, so
+// the whole table is never held in memory. If the handle was created with
+// RetryInterrupted, the dump is instead buffered in full before any flow
+// reaches the callback, so that an interrupted dump can be retried. Returning
+// false from the callback stops the iteration; the remaining messages are
+// drained and discarded.
 //
 // If the handle was created with a shared NETLINK_NETFILTER
 // socket, that socket stays locked for the duration of
