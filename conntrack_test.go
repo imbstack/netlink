@@ -257,7 +257,8 @@ func TestConntrackTableList(t *testing.T) {
 
 	// Now check that the Iter version works the same way
 	found = 0
-	h.ConntrackTableListIter(ConntrackTable, unix.AF_INET, checkFlow)
+	err = h.ConntrackTableListIter(ConntrackTable, unix.AF_INET, checkFlow)
+	CheckErrorFail(t, err)
 	if found != 5 {
 		t.Fatalf("Found only %d flows over 5 (iter version)", found)
 	}
