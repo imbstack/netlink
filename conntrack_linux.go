@@ -65,7 +65,7 @@ func ConntrackTableList(table ConntrackTableType, family InetFamily) ([]*Conntra
 // ConntrackTableListIter calls the provided callback on all ConntrackFlows in the table of a specific family
 // conntrack -L [table] [options]          List conntrack or expectation table
 func ConntrackTableListIter(table ConntrackTableType, family InetFamily, f func(*ConntrackFlow) bool) error {
-	return pkgHandle().ConntrackTableListIter(table, family, f)
+	return pkgHandle.ConntrackTableListIter(table, family, f)
 }
 
 // ConntrackTableListWithOptions returns the flow list of a table of a specific family and options
@@ -74,7 +74,7 @@ func ConntrackTableListIter(table ConntrackTableType, family InetFamily, f func(
 // If the returned error is [ErrDumpInterrupted], results may be inconsistent
 // or incomplete.
 func ConntrackTableListWithOptions(table ConntrackTableType, family InetFamily, options ConntrackTableListOptions) ([]*ConntrackFlow, error) {
-	return pkgHandle().ConntrackTableListWithOptions(table, family, options)
+	return pkgHandle.ConntrackTableListWithOptions(table, family, options)
 }
 
 // ConntrackTableListIterWithOptions returns the flow list of a table of a specific family and options
@@ -83,7 +83,7 @@ func ConntrackTableListWithOptions(table ConntrackTableType, family InetFamily, 
 // If the returned error is [ErrDumpInterrupted], results may be inconsistent
 // or incomplete.
 func ConntrackTableListIterWithOptions(table ConntrackTableType, family InetFamily, options ConntrackTableListOptions, f func(*ConntrackFlow) bool) error {
-	return pkgHandle().ConntrackTableListIterWithOptions(table, family, options, f)
+	return pkgHandle.ConntrackTableListIterWithOptions(table, family, options, f)
 }
 
 // ConntrackTableFlush flushes all the flows of a specified table

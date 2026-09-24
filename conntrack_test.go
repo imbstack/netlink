@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"runtime"
 	"testing"
 	"time"
@@ -44,6 +45,80 @@ func udpFlowCreateProg(t *testing.T, flows, srcPort int, dstIP string, dstPort i
 	}
 }
 
+// Install minimal hooks so packets traverse conntrack in this netns.
+// Prefer iptables if available; otherwise use nftables.
+// Returns a cleanup function that removes the installed hooks.
+func ensureCtHooksInThisNS(t *testing.T) func() {
+	t.Helper()
+
+	// Prefer iptables if present
+	if _, err := exec.LookPath("iptables"); err == nil {
+		ipt := func(fatalOnErr bool, args ...string) error {
+			cmd := exec.Command("iptables", args...)
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				if fatalOnErr {
+					t.Fatalf("iptables %v failed: %v\n%s", args, err, out)
+				}
+				// For -C, non-zero exit is expected when rule doesn't exist.
+				// For -D, we don't want to fail the test on cleanup.
+				t.Logf("iptables %v -> non-fatal error (ok): %v\n%s", args, err, out)
+			}
+			return err
+		}
+
+		// Minimal hooks so packets traverse conntrack in this netns.
+		// Check (-C); if absent, insert (-I). Idempotent on reruns.
+		var addedInput, addedOutput bool
+		if ipt(false, "-C", "INPUT", "-m", "conntrack", "--ctstate", "NEW,ESTABLISHED", "-j", "ACCEPT") != nil {
+			ipt(true, "-I", "INPUT", "-m", "conntrack", "--ctstate", "NEW,ESTABLISHED", "-j", "ACCEPT")
+			// Add a rule to set conntrack label to allocate the label space
+			// https://lore.kernel.org/netfilter-devel/aPdkVOTuUElaFKZZ@strlen.de/
+			ipt(true, "-I", "INPUT", "-m", "connlabel", "--set", "--label", "1")
+			addedInput = true
+		}
+		if ipt(false, "-C", "OUTPUT", "-m", "conntrack", "--ctstate", "ESTABLISHED", "-j", "ACCEPT") != nil {
+			ipt(true, "-I", "OUTPUT", "-m", "conntrack", "--ctstate", "ESTABLISHED", "-j", "ACCEPT")
+			// Add a rule to set conntrack label to allocate the label space
+			// https://lore.kernel.org/netfilter-devel/aPdkVOTuUElaFKZZ@strlen.de/
+			ipt(true, "-I", "OUTPUT", "-m", "connlabel", "--set", "--label", "1")
+			addedOutput = true
+		}
+		return func() {
+			if addedInput {
+				ipt(false, "-D", "INPUT", "-m", "conntrack", "--ctstate", "NEW,ESTABLISHED", "-j", "ACCEPT")
+			}
+			if addedOutput {
+				ipt(false, "-D", "OUTPUT", "-m", "conntrack", "--ctstate", "ESTABLISHED", "-j", "ACCEPT")
+			}
+		}
+	}
+
+	// Fallback to nft if iptables isn’t available
+	if _, err := exec.LookPath("nft"); err == nil {
+		// Best-effort, ignore “already exists” errors to be idempotent
+		_ = exec.Command("nft", "add", "table", "inet", "ct_test").Run()
+		_ = exec.Command("nft", "add", "chain", "inet", "ct_test", "input",
+			"{", "type", "filter", "hook", "input", "priority", "0", ";",
+			"ct", "state", "{", "new,established", "}", "accept", "}").Run()
+		_ = exec.Command("nft", "add", "chain", "inet", "ct_test", "output",
+			"{", "type", "filter", "hook", "output", "priority", "0", ";",
+			"ct", "state", "established", "accept", "}").Run()
+		// Add a rule to set conntrack label to allocate the label space
+		// https://lore.kernel.org/netfilter-devel/aPdkVOTuUElaFKZZ@strlen.de/
+		_ = exec.Command("nft", "add", "rule", "inet", "ct_test", "output",
+			"ct", "label", "set", "1").Run()
+		_ = exec.Command("nft", "add", "rule", "inet", "ct_test", "input",
+			"ct", "label", "set", "1").Run()
+		return func() {
+			_ = exec.Command("nft", "delete", "table", "inet", "ct_test").Run()
+		}
+	}
+
+	t.Skip("neither iptables nor nft found to install conntrack hooks")
+	return func() {}
+}
+
 func nsCreateAndEnter(t *testing.T) (*netns.NsHandle, *netns.NsHandle, *Handle) {
 	// Lock the OS Thread so we don't accidentally switch namespaces
 	runtime.LockOSThread()
@@ -63,6 +138,12 @@ func nsCreateAndEnter(t *testing.T) (*netns.NsHandle, *netns.NsHandle, *Handle) 
 	// Bing up loopback
 	link, _ := h.LinkByName("lo")
 	h.LinkSetUp(link)
+
+	setUpF(t, "/proc/sys/net/netfilter/nf_conntrack_acct", "1")
+	setUpF(t, "/proc/sys/net/netfilter/nf_conntrack_timestamp", "1")
+	setUpF(t, "/proc/sys/net/netfilter/nf_conntrack_udp_timeout", "45")
+
+	t.Cleanup(ensureCtHooksInThisNS(t))
 
 	return &origns, &ns, h
 }
@@ -119,10 +200,6 @@ func TestConntrackTableList(t *testing.T) {
 	defer origns.Close()
 	defer ns.Close()
 	defer runtime.UnlockOSThread()
-
-	setUpF(t, "/proc/sys/net/netfilter/nf_conntrack_acct", "1")
-	setUpF(t, "/proc/sys/net/netfilter/nf_conntrack_timestamp", "1")
-	setUpF(t, "/proc/sys/net/netfilter/nf_conntrack_udp_timeout", "45")
 
 	// Flush the table to start fresh
 	err = h.ConntrackTableFlush(ConntrackTable)
